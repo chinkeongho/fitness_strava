@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Deploy the Strava heatmap to a remote host with nginx.
 # Usage:
-#   ./scripts/deploy.sh --host your.server --port 8080 [--user ubuntu] [--path /opt/strava-heatmap] [--after 2024-01-01] [--start-server 1]
+#   ./scripts/deploy.sh --host your.server --port 8080 [--user ubuntu] [--path /opt/strava-heatmap] [--after 2024-01-01] [--start-server 1] [--enable-ssl 1] [--ssl-email you@example.com]
 # Positional fallback: first arg host, second arg port.
 #
 # Requirements on remote: nginx, python3, ssh access; sudo permissions to write nginx config and reload.
@@ -16,13 +16,15 @@ REMOTE_PATH="${REMOTE_PATH:-/home/ubuntu/strava-heatmap}"
 AFTER="${AFTER:-}"
 START_SERVER="${START_SERVER:-1}"
 SERVER_NAME="${SERVER_NAME:-fitness.sentinan.com}"
+USE_SSL="${USE_SSL:-0}"
+SSL_EMAIL="${SSL_EMAIL:-}"
 SITE_NAME="strava-heatmap"
 HTTP_PORT="${PORT:-}"
 SERVICE_UNIT_PATH="/etc/systemd/system/${SITE_NAME}.service"
 
 usage() {
   cat <<EOF
-Usage: $0 [--host HOST] [--port PORT] [--user USER] [--path /remote/path] [--after 2024-01-01] [--start-server 1]
+Usage: $0 [--host HOST] [--port PORT] [--user USER] [--path /remote/path] [--after 2024-01-01] [--start-server 1] [--enable-ssl 1] [--ssl-email you@example.com]
 Positional fallback: first arg host, second arg port.
 EOF
 }
@@ -36,6 +38,8 @@ while [[ $# -gt 0 ]]; do
     --after) AFTER="$2"; shift 2 ;;
     --start-server) START_SERVER="$2"; shift 2 ;;
     --server-name) SERVER_NAME="$2"; shift 2 ;;
+    --enable-ssl) USE_SSL="$2"; shift 2 ;;
+    --ssl-email) SSL_EMAIL="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) if [[ -z "$HOST" ]]; then HOST="$1"; elif [[ -z "$HTTP_PORT" ]]; then HTTP_PORT="$1"; else echo "Unknown arg $1"; usage; exit 1; fi; shift ;;
   esac
@@ -147,6 +151,22 @@ NGINX_CONF
   sudo nginx -t
   sudo systemctl reload nginx
   echo "nginx proxies http://$SERVER_NAME (port 80) -> http://127.0.0.1:${HTTP_PORT}/web/"
+
+  if [[ "${USE_SSL}" == "1" ]]; then
+    if [[ -z "${SSL_EMAIL}" ]]; then
+      echo "SSL enabled but --ssl-email not provided; skipping certbot." >&2
+    else
+      if ! command -v certbot >/dev/null 2>&1; then
+        echo "[deploy] Installing certbot..."
+        sudo apt-get update
+        sudo apt-get install -y certbot python3-certbot-nginx
+      fi
+      echo "[deploy] Requesting/renewing Let's Encrypt certificate for ${SERVER_NAME}"
+      sudo certbot --nginx --non-interactive --agree-tos -m "${SSL_EMAIL}" -d "${SERVER_NAME}" --redirect
+      sudo systemctl reload nginx
+      echo "nginx now serves https://${SERVER_NAME} with automatic HTTP->HTTPS redirect."
+    fi
+  fi
 fi
 EOF
 

@@ -61,7 +61,8 @@ The workflow is fetch -> render -> view.
 `./scripts/deploy.sh --host sentinan-dsp --port 8020 --user ubuntu --path /home/ubuntu/strava-heatmap --after 2024-01-01 --start-server 1 --server-name fitness.sentinan.com`  
 Positional fallback: `./scripts/deploy.sh sentinan-dsp 8020` (defaults: host=sentinan-dsp, user=ubuntu, path=/home/ubuntu/strava-heatmap, port=8020, server_name=fitness.sentinan.com).  
 On the remote it will rsync the project, build a venv, run `fetch_strava.py`, install npm deps, set up systemd (`strava-heatmap.service`) running `node server.js` on port 8020 (serves static + /quote proxy), and configure nginx on port 80 to proxy to 127.0.0.1:8020.  
-After deploy with server start, open `http://your.server/web/` (nginx listens on 80). The data folder lives under `REMOTE_PATH/data/`. Logs are in the journal for the systemd service.
+- Optional HTTPS (Let's Encrypt via nginx plugin): add `--enable-ssl 1 --ssl-email you@example.com` when deploying (requires DNS for `--server-name` pointing at the host and sudo to install certbot). The script installs certbot if missing, obtains/renews a cert for the server name, and configures HTTP->HTTPS redirects.
+- After deploy with server start, open `http://your.server/web/` (or https if enabled). The data folder lives under `REMOTE_PATH/data/`. Logs are in the journal for the systemd service.
 
 ## Data flow
 - Strava API -> local cache (JSON/GeoJSON) -> heatmap layers -> web UI.
