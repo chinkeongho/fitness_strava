@@ -2,6 +2,8 @@
 
 Turns your Strava activities into an interactive heatmap so you can explore where you've run, ridden, hiked, or skied.
 
+![Strava heatmap screenshot](static/screenshot.png)
+
 ## What it does
 - Pulls activities from the Strava API using your own OAuth app and refresh token.
 - Expands the encoded activity polylines into GeoJSON and merges them into a heat layer.
@@ -12,7 +14,6 @@ Turns your Strava activities into an interactive heatmap so you can explore wher
 ## Prerequisites
 - Strava account and an API application (create one at https://www.strava.com/settings/api).
 - Refresh token with `read_all` and `activity:read_all` scope for the athlete whose data you want to plot.
-- Map tile token (Mapbox, Thunderforest, or similar) if you want custom basemaps.
 - Runtime: use the language/tooling defined in this repo; the examples below assume a Python-based fetcher plus a web front end.
 
 ## Configure Strava access
@@ -35,8 +36,6 @@ Turns your Strava activities into an interactive heatmap so you can explore wher
    STRAVA_CLIENT_ID=xxxx
    STRAVA_CLIENT_SECRET=xxxx
    STRAVA_REFRESH_TOKEN=xxxx
-   MAP_TILE_PROVIDER=mapbox          # optional
-   MAP_TILE_TOKEN=xxxx               # optional
    PORT=3000
    ```
    Keep `.env` out of git. Tokens in this repo are sample values only; rotate real tokens if they were shared.
@@ -72,7 +71,7 @@ After deploy with server start, open `http://your.server/web/` (nginx listens on
 ## Troubleshooting
 - `401 Unauthorized`: refresh tokens expire if access is revoked; re-run the OAuth flow.
 - Missing paths: ensure your `.env` is loaded before running the fetcher.
-- Empty map: verify activities have GPS streams and your map tile token is valid.
+- Empty map: verify activities have GPS streams.
 
 ## Roadmap
 - Sport/date filters and activity type toggles.
