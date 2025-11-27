@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strava Activity Heatmap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin="anonymous"
+  >
+  <style>
+    :root {
+      --bg: #05080f;
+      --card: rgba(14, 22, 33, 0.75);
+      --fg: #e8edf5;
+      --muted: #97a0b0;
+      --accent: #ff7c43;
+      --accent-soft: rgba(255, 124, 67, 0.1);
+      --border: #1a2233;
+      --heat-0: #0f1724;
+      --heat-1: #1b3a5a;
+      --heat-2: #275592;
+      --heat-3: #3c7fc2;
+      --heat-4: #55bde4;
+      --heat-5: #7ce7c8;
+      --heat-6: #ffe17a;
+      --heat-7: #ffb155;
+      --heat-8: #ff7c43;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Inter", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(255,124,67,0.08), transparent 35%),
+                  radial-gradient(circle at 80% 0%, rgba(69,121,255,0.08), transparent 30%),
+                  var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+    }
+    header {
+      padding: 24px 28px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(255,124,67,0.12), rgba(69,121,255,0.08));
+    }
+    h1 {
+      margin: 4px 0 8px;
+      font-size: 24px;
+      letter-spacing: 0.2px;
+    }
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      max-width: 640px;
+      line-height: 1.5;
+    }
+    .stats { display: flex; gap: 16px; margin-left: auto; flex-wrap: wrap; }
+    .stat { padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); min-width: 140px; }
+    .stat span { display: block; font-size: 20px; font-weight: 600; }
+    .stat label { color: var(--muted); font-size: 12px; letter-spacing: 0.2px; }
+    .delta { color: var(--accent); font-size: 12px; }
+    main { padding: 20px 24px 28px; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 18px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 14px 35px rgba(0,0,0,0.25); }
+    .card-header { padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); gap: 10px; flex-wrap: wrap; }
+    .card-header h2 { margin: 0; font-size: 16px; letter-spacing: 0.2px; }
+    #map { width: 100%; height: 50vh; min-height: 300px; }
+    .pill {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--fg);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .calendar-card { display: flex; flex-direction: column; min-height: 360px; }
+    .calendar-grid { padding: 14px 16px 10px 0; display: grid; grid-auto-flow: column; grid-auto-columns: 16px; grid-template-rows: repeat(7, 16px); row-gap: 6px; column-gap: 4px; position: relative; }
+    .weekday-labels { display: grid; grid-template-rows: repeat(7, 16px); row-gap: 6px; font-size: 11px; color: var(--muted); text-align: right; width: 26px; padding: 32px 10px 10px 12px; flex-shrink: 0; }
+    .month-row { display: grid; grid-auto-flow: column; grid-auto-columns: 16px; gap: 4px; padding: 0 0 6px 0; font-size: 11px; color: var(--muted); }
+    .calendar-scroll { overflow-x: auto; padding-right: 16px; }
+    .calendar-flex { display: flex; align-items: flex-start; }
+    .chart-container { margin: 12px 16px 16px 16px; height: 260px; }
+    .chart-container canvas { width: 100% !important; height: 100% !important; }
+    .day {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--heat-0);
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    .day:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+    }
+    .h-0 { background: var(--heat-0); }
+    .h-1 { background: var(--heat-1); }
+    .h-2 { background: var(--heat-2); }
+    .h-3 { background: var(--heat-3); }
+    .h-4 { background: var(--heat-4); }
+    .h-5 { background: var(--heat-5); }
+    .h-6 { background: var(--heat-6); }
+    .h-7 { background: var(--heat-7); }
+    .h-8 { background: var(--heat-8); }
+    .legend { padding: 8px 16px 14px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+    .legend-steps { display: flex; gap: 6px; align-items: center; }
+    .legend-steps .step { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); }
+    .muted { color: var(--muted); font-size: 13px; }
+    .btn {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: linear-gradient(135deg, var(--accent) 0%, #ff9c70 100%);
+      color: #0d0f14;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(0,0,0,0.25); }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+    .latest {
+      padding: 12px 16px;
+      display: grid;
+      gap: 6px;
+    }
+    .latest .title { font-weight: 600; font-size: 15px; }
+    .latest .muted { font-size: 12px; }
+    .motivation { padding: 12px 16px; }
+    .badge { padding: 2px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      #map { height: 50vh; }
+      header { flex-direction: column; align-items: flex-start; }
+      .stats { margin-left: 0; }
+      .two-col { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="eyebrow">Strava heatmap</div>
+      <h1>Moves & Minutes</h1>
+      <p class="lead">Explore where you went and how long you moved. Map layers from your Strava activities plus a daily calendar of minutes, GitHub-style.</p>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <span id="stat-activities">0</span>
+        <label>Activities (total)</label>
+        <div class="delta" id="stat-activities-30">Last 30d: 0</div>
+      </div>
+      <div class="stat">
+        <span id="stat-minutes">0</span>
+        <label>Minutes (total)</label>
+        <div class="delta" id="stat-minutes-30">Last 30d: 0</div>
+      </div>
+      <div class="stat">
+        <span id="stat-days">0</span>
+        <label>Active days (30d)</label>
+        <div class="delta" id="stat-streak">Keep it up!</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card map-card">
+      <div class="card-header">
+        <h2>Routes</h2>
+        <div class="controls">
+          <label class="pill">
+            <input id="toggle-heat" type="checkbox" checked>
+            Heat
+          </label>
+          <label class="pill">
+            <input id="toggle-lines" type="checkbox" checked>
+            Lines
+          </label>
+          <span class="pill" id="meta">Loading…</span>
+          <button class="btn" id="refresh">Refresh data</button>
+        </div>
+      </div>
+      <div id="map"></div>
+    </section>
+
+    <section class="card calendar-card">
+      <div class="card-header">
+        <h2>Daily minutes</h2>
+        <span class="muted" id="calendar-meta">Loading…</span>
+      </div>
+      <div class="calendar-flex">
+        <div class="weekday-labels">
+          <div title="Monday">M</div>
+          <div title="Tuesday">T</div>
+          <div title="Wednesday">W</div>
+          <div title="Thursday">T</div>
+          <div title="Friday">F</div>
+          <div title="Saturday">S</div>
+          <div title="Sunday">S</div>
+        </div>
+        <div class="calendar-scroll">
+          <div class="month-row" id="month-row"></div>
+          <div id="calendar-heatmap" class="calendar-grid"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="muted">Minutes</span>
+        <div class="legend-steps">
+          <div class="step h-0" title="0"></div>
+          <div class="step h-1" title="15"></div>
+          <div class="step h-2" title="30"></div>
+          <div class="step h-3" title="45"></div>
+          <div class="step h-4" title="60"></div>
+          <div class="step h-5" title="70"></div>
+          <div class="step h-6" title="80"></div>
+          <div class="step h-7" title="90"></div>
+          <div class="step h-8" title="100+"></div>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="cumulative-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <div class="card">
+        <div class="card-header">
+          <h2>Latest route</h2>
+          <span class="muted" id="latest-date">—</span>
+        </div>
+        <div class="latest" id="latest-route">
+          <div class="title">No route yet</div>
+          <div class="muted">Run a new activity to see it here.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>Motivation</h2>
+          <span class="badge" id="mood">Keep going</span>
+        </div>
+        <div class="motivation">
+          <div id="motivation-text" class="lead">Consistency builds speed. Aim for a few sessions every week.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin="anonymous"
+  ></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const heatToggle = document.getElementById("toggle-heat");
+    const lineToggle = document.getElementById("toggle-lines");
+    const metaEl = document.getElementById("meta");
+    const statActivities = document.getElementById("stat-activities");
+    const statDays = document.getElementById("stat-days");
+    const statMinutes = document.getElementById("stat-minutes");
+    const statActivities30 = document.getElementById("stat-activities-30");
+    const statMinutes30 = document.getElementById("stat-minutes-30");
+    const statStreak = document.getElementById("stat-streak");
+    const calendarMeta = document.getElementById("calendar-meta");
+    const calendarEl = document.getElementById("calendar-heatmap");
+    const monthRowEl = document.getElementById("month-row");
+    const cumulativeChartCtx = document.getElementById("cumulative-chart");
+    let cumulativeChart = null;
+    const refreshBtn = document.getElementById("refresh");
+    const latestRouteEl = document.getElementById("latest-route");
+    const latestDateEl = document.getElementById("latest-date");
+    const moodEl = document.getElementById("mood");
+    const motivationTextEl = document.getElementById("motivation-text");
+
+    let map, heatLayer, lineLayer, latestLineLayer;
+
+    const quotes = [
+      { mood: "On fire", text: "The miracle isn’t that I finished. The miracle is that I had the courage to start.", author: "John Bingham" },
+      { mood: "Solid groove", text: "Success isn’t always about greatness. It’s about consistency. Consistent hard work leads to success.", author: "Dwayne Johnson" },
+      { mood: "Fresh start", text: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
+      { mood: "Keep going", text: "Motivation is what gets you started. Habit is what keeps you going.", author: "Jim Ryun" },
+      { mood: "On fire", text: "Quality is not an act, it is a habit.", author: "Aristotle" },
+      { mood: "Solid groove", text: "Discipline is choosing between what you want now and what you want most.", author: "Abraham Lincoln" },
+      { mood: "Fresh start", text: "A year from now you’ll wish you had started today.", author: "Karen Lamb" },
+      { mood: "Keep going", text: "Don’t limit your challenges. Challenge your limits.", author: "Jerry Dunn" },
+    ];
+
+    let dailyQuote = null;
+    let latestRecent = null;
+    let remoteQuotesEnabled = true; // use local proxy /quote
+    const quoteApiUrl = "/quote";
+
+    function initMap() {
+      map = L.map("map", { preferCanvas: true });
+      const base = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap",
+      });
+      base.addTo(map);
+    }
+
+    function featureToPolyline(feat, style) {
+      const coords = feat.geometry?.coordinates || [];
+      const latlngs = coords.map(([lon, lat]) => [lat, lon]);
+      return L.polyline(latlngs, style);
+    }
+
+    function decodeGeo(geo) {
+      if (lineLayer) {
+        lineLayer.remove();
+        lineLayer = null;
+      }
+
+      lineLayer = L.layerGroup();
+      const style = { color: "#ff7c43", weight: 2, opacity: 0.7 };
+      geo.features.forEach((feat) => {
+        const poly = featureToPolyline(feat, style);
+        lineLayer.addLayer(poly);
+      });
+
+      const allPoints = [];
+      let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+
+      geo.features.forEach((feat) => {
+        const coords = feat.geometry.coordinates || [];
+        coords.forEach(([lon, lat]) => {
+          allPoints.push([lat, lon, 0.6]);
+          minLat = Math.min(minLat, lat);
+          maxLat = Math.max(maxLat, lat);
+          minLon = Math.min(minLon, lon);
+          maxLon = Math.max(maxLon, lon);
+        });
+      });
+
+      heatLayer = L.heatLayer(allPoints, { radius: 7, blur: 12, maxZoom: 16, minOpacity: 0.25 });
+
+      if (allPoints.length) {
+        const southWest = L.latLng(minLat, minLon);
+        const northEast = L.latLng(maxLat, maxLon);
+        map.fitBounds(L.latLngBounds(southWest, northEast));
+      } else {
+        map.setView([0, 0], 2);
+      }
+
+      updateLayers();
+      metaEl.textContent = `${geo.features.length} activities loaded`;
+    }
+
+    function updateLayers() {
+      if (heatLayer) {
+        if (heatToggle.checked) {
+          heatLayer.addTo(map);
+        } else {
+          heatLayer.remove();
+        }
+      }
+      if (lineLayer) {
+        if (lineToggle.checked) {
+          lineLayer.addTo(map);
+        } else {
+          lineLayer.remove();
+        }
+      }
+      if (latestLineLayer) {
+        latestLineLayer.addTo(map);
+      }
+    }
+
+    function fmtMinutes(totalMinutes) {
+      return Math.round(totalMinutes).toLocaleString();
+    }
+
+    function computeDailyMinutes(activities) {
+      const totals = new Map();
+      activities.forEach((act) => {
+        const start = act.start_date;
+        const move = act.moving_time || 0;
+        if (!start) return;
+        const day = start.slice(0, 10); // YYYY-MM-DD
+        const prev = totals.get(day) || 0;
+        totals.set(day, prev + move / 60); // minutes
+      });
+      return totals;
+    }
+
+    function computeRecent(raw) {
+      const now = Date.now();
+      const ms30 = 30 * 24 * 3600 * 1000;
+      const ms7 = 7 * 24 * 3600 * 1000;
+      let activities30 = 0;
+      let minutes30 = 0;
+      let activeDays30 = new Set();
+      let activeDays7 = new Set();
+      let latest = null;
+      raw.forEach((act) => {
+        const start = act.start_date;
+        const move = act.moving_time || 0;
+        if (!start) return;
+        const ts = Date.parse(start);
+        if (isNaN(ts)) return;
+        if (!latest || ts > Date.parse(latest.start_date)) latest = act;
+        if (now - ts <= ms30) {
+          activities30 += 1;
+          minutes30 += move / 60;
+          activeDays30.add(start.slice(0,10));
+          if (now - ts <= ms7) {
+            activeDays7.add(start.slice(0,10));
+          }
+        }
+      });
+      return { activities30, minutes30, activeDays30, activeDays7, latest };
+    }
+
+    function buildDayRange() {
+      const end = new Date();
+      const start = new Date(end);
+      start.setMonth(end.getMonth() - 12);
+      // align to Monday
+      while (start.getDay() !== 1) {
+        start.setDate(start.getDate() - 1);
+      }
+      const days = [];
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        days.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return { start, end, days };
+    }
+
+    function dayKey(d) {
+      return d.toISOString().slice(0, 10);
+    }
+
+    function intensityClass(minutes) {
+      if (minutes >= 100) return "h-8";
+      if (minutes >= 90) return "h-7";
+      if (minutes >= 80) return "h-6";
+      if (minutes >= 70) return "h-5";
+      if (minutes >= 60) return "h-4";
+      if (minutes >= 45) return "h-3";
+      if (minutes >= 30) return "h-2";
+      if (minutes >= 15) return "h-1";
+      return "h-0";
+    }
+
+    function renderCalendar(dailyMinutes) {
+      calendarEl.innerHTML = "";
+      monthRowEl.innerHTML = "";
+      const { start, end, days } = buildDayRange();
+      const activeDays = [];
+      let totalMinutes = 0;
+      let currentMonth = "";
+      let monthSpan = 0;
+      const sparkPoints = [];
+
+      const flushMonth = (force = false) => {
+        if (currentMonth && monthSpan > 0) {
+          // Hide very short month labels unless forced (first month)
+          if (monthSpan < 2 && !force) {
+            // skip rendering to avoid crowding
+          } else {
+            const div = document.createElement("div");
+            div.style.gridColumn = `span ${monthSpan}`;
+            div.textContent = currentMonth;
+            monthRowEl.appendChild(div);
+          }
+        }
+      };
+
+      // Build month labels based on Mondays (grid columns)
+      let colIndex = 0;
+      days.forEach((d) => {
+        const key = dayKey(d);
+        const minutes = dailyMinutes.get(key) || 0;
+        totalMinutes += minutes;
+        sparkPoints.push({ x: colIndex, y: minutes, date: key });
+        if (minutes > 0) activeDays.push(key);
+        const cell = document.createElement("div");
+        cell.className = `day ${intensityClass(minutes)}`;
+        cell.title = `${key}: ${Math.round(minutes)} min`;
+        calendarEl.appendChild(cell);
+
+        // Month labeling: increment when we hit a new month on Mondays
+        if (d.getDay() === 1) {
+          const label = d.toLocaleString("default", { month: "short" });
+          if (label !== currentMonth) {
+            flushMonth(colIndex === 0); // force showing the first month even if short
+            currentMonth = label;
+            monthSpan = 1;
+          } else {
+            monthSpan += 1;
+          }
+          colIndex += 1;
+        }
+      });
+      flushMonth(true);
+      renderCumulativeChart(sparkPoints, start, end);
+
+      // Scroll to the latest portion if overflow
+      const scrollContainer = document.querySelector(".calendar-scroll");
+      if (scrollContainer) {
+        requestAnimationFrame(() => {
+          scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+        });
+      }
+
+      calendarMeta.textContent = `${activeDays.length} active days between ${start.toISOString().slice(0,10)} and ${end.toISOString().slice(0,10)}`;
+      statDays.textContent = activeDays.length.toLocaleString();
+      statMinutes.textContent = fmtMinutes(totalMinutes);
+    }
+
+    function renderCumulativeChart(points, startDate, endDate) {
+      if (!cumulativeChartCtx) return;
+      let cumulative = 0;
+      const data = points.map((p) => {
+        cumulative += p.y;
+        return { x: p.date, y: Math.round(cumulative) };
+      });
+      const labels = data.map((d) => d.x);
+      const values = data.map((d) => d.y);
+      const ctx = cumulativeChartCtx.getContext("2d");
+      const gradient = ctx.createLinearGradient(0, 0, 0, cumulativeChartCtx.clientHeight || 260);
+      gradient.addColorStop(0, "rgba(255,124,67,0.35)");
+      gradient.addColorStop(1, "rgba(255,124,67,0.05)");
+
+      const config = {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Cumulative minutes",
+              data: values,
+              borderColor: "#7ce7c8",
+              backgroundColor: gradient,
+              fill: true,
+              tension: 0.25,
+              pointRadius: 0,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: "index",
+              intersect: false,
+              callbacks: {
+                title: (items) => items[0].label,
+                label: (item) => `${item.parsed.y} min`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 8 },
+              grid: { display: false },
+            },
+            y: {
+              ticks: { maxTicksLimit: 6 },
+              grid: { color: "#1a2233" },
+            },
+          },
+        },
+      };
+
+      if (!cumulativeChart) {
+        cumulativeChart = new Chart(cumulativeChartCtx, config);
+      } else {
+        cumulativeChart.data.labels = labels;
+        cumulativeChart.data.datasets[0].data = values;
+        cumulativeChart.update();
+      }
+    }
+
+    function formatDistance(meters) {
+      if (!meters && meters !== 0) return "—";
+      const km = meters / 1000;
+      return `${km.toFixed(1)} km`;
+    }
+
+    function formatDuration(seconds) {
+      if (!seconds && seconds !== 0) return "—";
+      const h = Math.floor(seconds / 3600);
+      const m = Math.round((seconds % 3600) / 60);
+      if (h === 0) return `${m} min`;
+      return `${h}h ${m}m`;
+    }
+
+    function renderLatest(latest) {
+      if (!latest) {
+        latestRouteEl.innerHTML = '<div class="title">No route yet</div><div class="muted">Run a new activity to see it here.</div>';
+        latestDateEl.textContent = "—";
+        return;
+      }
+      const start = latest.start_date ? latest.start_date.replace("T", " ").replace("Z"," UTC") : "—";
+      latestRouteEl.innerHTML = `
+        <div class="title">${latest.name || "Untitled activity"}</div>
+        <div class="muted">${start}</div>
+        <div class="muted">${latest.type || "Activity"} • ${formatDistance(latest.distance)} • ${formatDuration(latest.moving_time)} • ${Math.round(latest.total_elevation_gain || 0)} m gain</div>
+      `;
+      latestDateEl.textContent = latest.start_date ? latest.start_date.slice(0,10) : "—";
+    }
+
+    function pickDailyQuote(mood) {
+      const byMood = quotes.filter((q) => q.mood === mood);
+      const pool = byMood.length ? byMood : quotes;
+      const today = new Date().toISOString().slice(0, 10);
+      const hash = today.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+      return pool[hash % pool.length];
+    }
+
+    async function fetchDailyQuote() {
+      if (!remoteQuotesEnabled) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(quoteApiUrl, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error("quote fetch failed");
+        const data = await res.json();
+        // zenquotes proxy returns [{q,a}] or {content,author}
+        let text = "";
+        let author = "";
+        if (Array.isArray(data) && data.length > 0) {
+          text = data[0].q || "";
+          author = data[0].a || "";
+        } else if (data && data.content) {
+          text = data.content;
+          author = data.author || "";
+        }
+        if (!text) throw new Error("quote missing content");
+        dailyQuote = { text, author };
+        if (latestRecent) {
+          renderMotivation(latestRecent.activeDays7, latestRecent.activities30);
+        }
+      } catch (err) {
+        remoteQuotesEnabled = false; // stop retrying if proxy/unavailable
+      }
+    }
+
+    function renderMotivation(activeDays7, activities30) {
+      latestRecent = { activeDays7, activities30 };
+      let mood = "Keep going";
+      if (activeDays7.size >= 4) {
+        mood = "On fire";
+      } else if (activities30 >= 10) {
+        mood = "Solid groove";
+      } else if (activeDays7.size === 0) {
+        mood = "Fresh start";
+      }
+      const quote = dailyQuote || pickDailyQuote(mood);
+      moodEl.textContent = mood;
+      motivationTextEl.textContent = `“${quote.text}” — ${quote.author}`;
+    }
+
+    function bust(url) {
+      const t = Date.now();
+      return `${url}?t=${t}`;
+    }
+
+    async function loadData() {
+      const geoReq = fetch(bust("../data/activities.geojson"));
+      const rawReq = fetch(bust("../data/activities_raw.json"));
+      const [geoRes, rawRes] = await Promise.all([geoReq, rawReq]);
+      if (!geoRes.ok) throw new Error("No GeoJSON found. Run fetch_strava.py first.");
+      const geo = await geoRes.json();
+      let raw = [];
+      if (rawRes.ok) {
+        try { raw = await rawRes.json(); } catch (e) { raw = []; }
+      }
+
+      statActivities.textContent = geo.features.length.toLocaleString();
+      const daily = computeDailyMinutes(raw);
+      renderCalendar(daily);
+      decodeGeo(geo);
+
+      const recent = computeRecent(raw);
+      statActivities30.textContent = `Last 30d: ${recent.activities30}`;
+      statMinutes30.textContent = `Last 30d: ${fmtMinutes(recent.minutes30)}`;
+      statDays.textContent = recent.activeDays30.size.toLocaleString();
+      statStreak.textContent = `Past 7d: ${recent.activeDays7.size} days`;
+      renderLatest(recent.latest);
+      renderMotivation(recent.activeDays7, recent.activities30);
+      addLatestHighlight(recent.latest, geo);
+      fetchDailyQuote().catch(() => {});
+    }
+
+    function addLatestHighlight(latest, geo) {
+      if (latestLineLayer) {
+        latestLineLayer.remove();
+        latestLineLayer = null;
+      }
+      if (!latest) return;
+      // Find matching feature by id
+      const match = geo.features.find((f) => f.properties && f.properties.id === latest.id);
+      if (!match) return;
+      latestLineLayer = featureToPolyline(match, { color: "#ffd166", weight: 5, opacity: 0.9 });
+      latestLineLayer.addTo(map);
+      if (latestLineLayer.getBounds && latestLineLayer.getBounds().isValid()) {
+        map.fitBounds(latestLineLayer.getBounds(), { padding: [20, 20] });
+      }
+    }
+
+    function refresh() {
+      metaEl.textContent = "Refreshing…";
+      calendarMeta.textContent = "Refreshing…";
+      loadData().catch((err) => {
+        console.error(err);
+        metaEl.textContent = "No data found. Run fetch_strava.py first.";
+        calendarMeta.textContent = "No data to show.";
+      });
+    }
+
+    heatToggle.addEventListener("change", updateLayers);
+    lineToggle.addEventListener("change", updateLayers);
+    refreshBtn.addEventListener("click", refresh);
+
+    initMap();
+    refresh();
+  </script>
+</body>
+</html>

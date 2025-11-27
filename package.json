@@ -1,0 +1,11 @@
+{
+  "name": "strava-heatmap",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "serve": "PORT=${PORT:-8000} node server.js"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
