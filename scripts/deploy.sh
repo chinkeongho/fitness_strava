@@ -16,8 +16,8 @@ REMOTE_PATH="${REMOTE_PATH:-/home/ubuntu/strava-heatmap}"
 AFTER="${AFTER:-}"
 START_SERVER="${START_SERVER:-1}"
 SERVER_NAME="${SERVER_NAME:-fitness.sentinan.com}"
-USE_SSL="${USE_SSL:-0}"
-SSL_EMAIL="${SSL_EMAIL:-}"
+USE_SSL="${USE_SSL:-1}"
+SSL_EMAIL="${SSL_EMAIL:-chinkeong.ho@gmail.com}"
 SITE_NAME="strava-heatmap"
 HTTP_PORT="${PORT:-}"
 SERVICE_UNIT_PATH="/etc/systemd/system/${SITE_NAME}.service"
@@ -119,6 +119,8 @@ WorkingDirectory=${REMOTE_PATH}
 User=${USER}
 Group=${USER}
 Environment=PATH=${REMOTE_PATH}/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+Environment=FETCH_PYTHON=${REMOTE_PATH}/.venv/bin/python3
+EnvironmentFile=${REMOTE_PATH}/.env
 ExecStart=/usr/bin/env bash -lc 'cd ${REMOTE_PATH} && PORT=${HTTP_PORT} node server.js'
 Restart=always
 StandardOutput=journal

@@ -741,16 +741,38 @@
     function refresh() {
       metaEl.textContent = "Refreshing…";
       calendarMeta.textContent = "Refreshing…";
-      loadData().catch((err) => {
+      return loadData().catch((err) => {
         console.error(err);
         metaEl.textContent = "No data found. Run fetch_strava.py first.";
         calendarMeta.textContent = "No data to show.";
       });
     }
 
+    async function triggerBackendFetch() {
+      refreshBtn.disabled = true;
+      const originalLabel = refreshBtn.textContent;
+      refreshBtn.textContent = "Fetching…";
+      metaEl.textContent = "Fetching from Strava…";
+      try {
+        const res = await fetch("/refresh", { method: "POST" });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(payload.error || res.statusText);
+        }
+        metaEl.textContent = "Fetch complete, reloading…";
+        await refresh();
+      } catch (err) {
+        console.error(err);
+        metaEl.textContent = `Fetch failed: ${err.message || err}`;
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = originalLabel;
+      }
+    }
+
     heatToggle.addEventListener("change", updateLayers);
     lineToggle.addEventListener("change", updateLayers);
-    refreshBtn.addEventListener("click", refresh);
+    refreshBtn.addEventListener("click", triggerBackendFetch);
 
     initMap();
     refresh();

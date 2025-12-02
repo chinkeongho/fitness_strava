@@ -5,10 +5,12 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 const ROOT = path.resolve(__dirname);
 const WEB_ROOT = path.join(ROOT, "web");
+const VENV_PY = path.join(ROOT, ".venv", "bin", "python3");
 
 const MIME = {
   ".html": "text/html",
@@ -26,6 +28,39 @@ const MIME = {
 function send(res, status, body, headers = {}) {
   res.writeHead(status, headers);
   res.end(body);
+}
+
+function log(message) {
+  const ts = new Date().toISOString();
+  console.log(`[${ts}] ${message}`);
+}
+
+let refreshInFlight = false;
+
+function runFetcher() {
+  const pythonCmd = process.env.FETCH_PYTHON || (fs.existsSync(VENV_PY) ? VENV_PY : "python3");
+  return new Promise((resolve, reject) => {
+    const proc = spawn(pythonCmd, ["fetch_strava.py"], {
+      cwd: ROOT,
+      env: process.env,
+    });
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+      } else {
+        reject(new Error(`fetch_strava.py exited with ${code}: ${stderr || stdout}`));
+      }
+    });
+  });
 }
 
 async function proxyQuote(res) {
@@ -67,6 +102,43 @@ function resolveFile(urlPath) {
 }
 
 const server = http.createServer(async (req, res) => {
+  if (req.url === "/refresh") {
+    if (req.method !== "POST") {
+      return send(res, 405, "Method Not Allowed", { "Content-Type": "text/plain" });
+    }
+    if (refreshInFlight) {
+      return send(
+        res,
+        429,
+        JSON.stringify({ error: "refresh_in_progress" }),
+        { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+      );
+    }
+    refreshInFlight = true;
+    log("Refresh request received");
+    try {
+      const output = await runFetcher();
+      log("Refresh completed successfully");
+      send(
+        res,
+        200,
+        JSON.stringify({ status: "ok", output }),
+        { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+      );
+    } catch (err) {
+      log(`Refresh failed: ${err.message || err}`);
+      send(
+        res,
+        500,
+        JSON.stringify({ error: err.message || "fetch_failed" }),
+        { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+      );
+    } finally {
+      refreshInFlight = false;
+    }
+    return;
+  }
+
   if (req.url.startsWith("/quote")) {
     return proxyQuote(res);
   }

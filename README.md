@@ -46,6 +46,8 @@ The workflow is fetch -> render -> view.
 - Pull activities and cache them locally: `python fetch_strava.py --after 2024-01-01` (writes `data/activities_raw.json` and `data/activities.geojson`). If `--after` is omitted and a cache exists, the script auto-uses the latest cached start_date to fetch incrementally.
 - Serve the heatmap UI via the Node server (static + quote proxy): `npm install` then `npm run serve` (uses PORT env var, default 8000) and open `http://localhost:${PORT:-8000}/web/`.
 - One-shot helper: `AFTER=2024-01-01 ./scripts/deploy_local.sh` (auto-creates `.venv`, installs deps, loads `.env`, fetches, then serves on `http://localhost:${PORT:-8000}/web/` via `node server.js`).
+- In the UI, the “Refresh data” button POSTs to `/refresh` to run `fetch_strava.py` on the server, then reloads the cached files. The server will use `.venv/bin/python3` if present, else `FETCH_PYTHON` env, else `python3`; ensure dependencies from `requirements.txt` are installed and Strava env vars are configured on the host running `server.js`.
+- Quick local start: `FETCH=1 AFTER=2024-01-01 PORT=8000 ./scripts/start_local.sh` (creates `.venv` if missing, installs Python/node deps, optionally fetches, then runs `node server.js`).
 
 ### Refreshing Strava tokens / scopes
 - Build an auth URL: `python scripts/strava_auth_helper.py` (uses `STRAVA_CLIENT_ID/SECRET` from `.env`).
@@ -58,11 +60,11 @@ The workflow is fetch -> render -> view.
 ## Remote deploy
 - Ensure your `.env` has valid STRAVA tokens (with `activity:read_all`) and is present locally so it can be synced.
 - Deploy over SSH (rsync + remote venv + fetch + serve):  
-`./scripts/deploy.sh --host sentinan-dsp --port 8020 --user ubuntu --path /home/ubuntu/strava-heatmap --after 2024-01-01 --start-server 1 --server-name fitness.sentinan.com`  
+`./scripts/deploy.sh --host sentinan-dsp --port 8020 --user ubuntu --path /home/ubuntu/strava-heatmap --after 2024-01-01 --start-server 1 --server-name fitness.sentinan.com --ssl-email you@example.com`  
 Positional fallback: `./scripts/deploy.sh sentinan-dsp 8020` (defaults: host=sentinan-dsp, user=ubuntu, path=/home/ubuntu/strava-heatmap, port=8020, server_name=fitness.sentinan.com).  
 On the remote it will rsync the project, build a venv, run `fetch_strava.py`, install npm deps, set up systemd (`strava-heatmap.service`) running `node server.js` on port 8020 (serves static + /quote proxy), and configure nginx on port 80 to proxy to 127.0.0.1:8020.  
-- Optional HTTPS (Let's Encrypt via nginx plugin): add `--enable-ssl 1 --ssl-email you@example.com` when deploying (requires DNS for `--server-name` pointing at the host and sudo to install certbot). The script installs certbot if missing, obtains/renews a cert for the server name, and configures HTTP->HTTPS redirects.
-- After deploy with server start, open `http://your.server/web/` (or https if enabled). The data folder lives under `REMOTE_PATH/data/`. Logs are in the journal for the systemd service.
+- HTTPS is enabled by default (Let’s Encrypt via certbot/nginx). Provide `--ssl-email you@example.com`; ensure DNS for `--server-name` points at the host and ports 80/443 are reachable. To skip HTTPS, pass `--enable-ssl 0`.
+- After deploy with server start, open `https://your.server/web/` (HTTP redirects to HTTPS). The data folder lives under `REMOTE_PATH/data/`. Logs are in the journal for the systemd service.
 
 ## Data flow
 - Strava API -> local cache (JSON/GeoJSON) -> heatmap layers -> web UI.
