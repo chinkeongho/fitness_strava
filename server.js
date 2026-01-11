@@ -11,6 +11,8 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 const ROOT = path.resolve(__dirname);
 const WEB_ROOT = path.join(ROOT, "web");
 const VENV_PY = path.join(ROOT, ".venv", "bin", "python3");
+const API_KEY = process.env.API_KEY || "";
+const RAW_CACHE = path.join(ROOT, "data", "activities_raw.json");
 
 const MIME = {
   ".html": "text/html",
@@ -36,6 +38,57 @@ function log(message) {
 }
 
 let refreshInFlight = false;
+
+function unauthorized(res) {
+  send(res, 401, JSON.stringify({ error: "unauthorized" }), {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+  });
+}
+
+function ensureApiKey(req, res) {
+  if (!API_KEY) {
+    return true;
+  }
+  const headerKey = req.headers["x-api-key"];
+  const urlKey = new URL(req.url, `http://localhost:${PORT}`).searchParams.get("api_key");
+  const supplied = Array.isArray(headerKey) ? headerKey[0] : headerKey;
+  if (supplied === API_KEY || urlKey === API_KEY) {
+    return true;
+  }
+  unauthorized(res);
+  return false;
+}
+
+function readCachedActivities() {
+  if (!fs.existsSync(RAW_CACHE)) {
+    return [];
+  }
+  try {
+    const raw = fs.readFileSync(RAW_CACHE, "utf8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function filterActivitiesByDate(activities, date) {
+  if (!date) return [];
+  return activities.filter((act) => (act.start_date || "").startsWith(date));
+}
+
+function latestActivity(activities) {
+  let latest = null;
+  activities.forEach((act) => {
+    const ts = Date.parse(act.start_date || "");
+    if (isNaN(ts)) return;
+    if (!latest || ts > Date.parse(latest.start_date || "")) {
+      latest = act;
+    }
+  });
+  return latest;
+}
 
 function runFetcher() {
   const pythonCmd = process.env.FETCH_PYTHON || (fs.existsSync(VENV_PY) ? VENV_PY : "python3");
@@ -141,6 +194,42 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url.startsWith("/quote")) {
     return proxyQuote(res);
+  }
+
+  if (req.url.startsWith("/api/")) {
+    if (!ensureApiKey(req, res)) {
+      return;
+    }
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const pathName = url.pathname;
+    const activities = readCachedActivities();
+    if (pathName === "/api/latest") {
+      const latest = latestActivity(activities);
+      return send(res, 200, JSON.stringify({ latest }), {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache",
+      });
+    }
+    if (pathName === "/api/date") {
+      const date = url.searchParams.get("date") || "";
+      if (!date) {
+        return send(res, 400, JSON.stringify({ error: "missing_date" }), {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        });
+      }
+      const matches = filterActivitiesByDate(activities, date);
+      return send(res, 200, JSON.stringify({ date, activities: matches }), {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache",
+      });
+    }
+    return send(res, 404, JSON.stringify({ error: "not_found" }), {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    });
   }
 
   const filePath = resolveFile(new URL(req.url, `http://localhost:${PORT}`).pathname);
