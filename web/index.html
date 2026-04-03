@@ -853,7 +853,7 @@
       });
     }
 
-    function setHrChartData(labels, heartRateValues, paceValues) {
+    function setHrChartData(labels, heartRateValues, speedValues) {
       const ctx = hrDetailChartCtx.getContext("2d");
       const config = {
         type: "line",
@@ -871,14 +871,14 @@
               yAxisID: "yHr",
             },
             {
-              label: "Pace",
-              data: paceValues,
+              label: "Speed",
+              data: speedValues,
               borderColor: "#7ce7c8",
               backgroundColor: "rgba(124,231,200,0.12)",
               fill: false,
               tension: 0.2,
               pointRadius: 0,
-              yAxisID: "yPace",
+              yAxisID: "ySpeed",
             },
           ],
         },
@@ -893,7 +893,7 @@
                   if (item.dataset.yAxisID === "yHr") {
                     return `${Math.round(item.parsed.y)} bpm`;
                   }
-                  return `${Number(item.parsed.y).toFixed(2)} min/km`;
+                  return `${Number(item.parsed.y).toFixed(2)} km/h`;
                 },
               },
             },
@@ -908,12 +908,12 @@
               ticks: { maxTicksLimit: 6 },
               grid: { color: "#1a2233" },
             },
-            yPace: {
+            ySpeed: {
               position: "right",
-              reverse: true,
+              reverse: false,
               ticks: {
                 maxTicksLimit: 6,
-                callback: (value) => `${Number(value).toFixed(1)}`,
+                callback: (value) => `${Number(value).toFixed(1)} km/h`,
               },
               grid: { drawOnChartArea: false },
             },
@@ -925,7 +925,7 @@
       } else {
         hrDetailChart.data.labels = labels;
         hrDetailChart.data.datasets[0].data = heartRateValues;
-        hrDetailChart.data.datasets[1].data = paceValues;
+        hrDetailChart.data.datasets[1].data = speedValues;
         hrDetailChart.update();
       }
       hrChartWrapEl.classList.remove("hidden");
@@ -971,12 +971,12 @@
           const secs = Math.floor(seconds % 60);
           return `${mins}:${String(secs).padStart(2, "0")}`;
         });
-        const paceValues = hrStream.map((_, idx) => {
+        const speedValues = hrStream.map((_, idx) => {
           const velocity = Number(velocityStream[idx] || 0);
           if (!velocity) return null;
-          return 1000 / velocity / 60;
+          return velocity * 3.6;
         });
-        setHrChartData(labels, hrStream, paceValues);
+        setHrChartData(labels, hrStream, speedValues);
         return;
       }
 
