@@ -1,13 +1,20 @@
 # Strava Activity Heatmap - Architecture & Specs
 
 ## Overview
-This project turns Strava activity data into a local cache plus an interactive web UI with a map heat layer, line overlays, and activity stats. The system is composed of a Python data fetcher, a minimal Node.js HTTP server, and a static frontend (HTML/CSS/JS) that renders the map and charts.
+This project turns Strava activity data into a local cache plus an interactive web UI with:
+- a route heatmap and activity dashboard
+- per-run detailed HR/pace inspection when stream data is available
+- a separate analysis page backed by `data/fitness_analysis.json`
+
+The system is composed of a Python data fetcher, a minimal Node.js HTTP server, and a static frontend (HTML/CSS/JS).
 
 ## Architecture
-- Data fetcher: `fetch_strava.py` pulls activities from the Strava API, merges them with the local cache, and emits GeoJSON.
-- Cache layer: JSON and GeoJSON files in `data/` used by the frontend.
-- Web server: `server.js` serves static files, exposes a `/refresh` endpoint to run the fetcher, and proxies quotes to avoid CORS.
-- Frontend UI: `web/index.html` loads GeoJSON and raw activity JSON, renders a Leaflet map and UI stats, and triggers refreshes.
+- Data fetcher: `fetch_strava.py` pulls activities from the Strava API, merges them with the local cache, backfills recent missing detailed streams, and emits GeoJSON plus longitudinal analysis JSON.
+- Cache layer: JSON, GeoJSON, and per-activity stream files in `data/`.
+- Web server: `server.js` serves static files, exposes `/refresh`, keeps `/api/*` protected via `API_KEY` when enabled, and exposes `/activity-stream` for dashboard-facing on-demand stream fetch/caching.
+- Frontend UI:
+  - `web/index.html` renders the heatmap dashboard and per-run HR/pace inspection
+  - `web/analysis.html` renders the fitness/efficiency charts
 
 ### Architecture Diagram (Logical)
 ```text
@@ -28,6 +35,8 @@ This project turns Strava activity data into a local cache plus an interactive w
                  |      data/        |
                  | activities_raw    |
                  | activities.geojson|
+                 | activity_streams/ |
+                 | fitness_analysis  |
                  +-------------------+
                          ^
                          | HTTP GET
@@ -43,8 +52,10 @@ This project turns Strava activity data into a local cache plus an interactive w
 2. `fetch_strava.py` refreshes the access token as needed.
 3. Activities are fetched from Strava and merged into `data/activities_raw.json`.
 4. `data/activities.geojson` is generated from the merged activities.
-5. The UI loads GeoJSON and raw activity JSON to render layers and stats.
-6. The UI can trigger `POST /refresh` to pull new data and reload the cache.
+5. Recent missing detailed HR-enabled runs are cached under `data/activity_streams/<activity_id>.json`.
+6. `data/fitness_analysis.json` is generated from a stream-preferred, summary-fallback policy.
+7. The dashboard and analysis page load the relevant cache files to render maps, stats, run inspection, and trends.
+8. The UI can trigger `POST /refresh` to pull new data and reload the cache.
 
 ### Sequence Flow: Initial Page Load
 ```text
@@ -68,13 +79,15 @@ server.js -> fetch_strava.py: spawn process
 fetch_strava.py -> Strava API: refresh token (if needed)
 fetch_strava.py -> Strava API: GET /athlete/activities (paged)
 Strava API -> fetch_strava.py: activities
-fetch_strava.py -> data/: write activities_raw.json + activities.geojson
+fetch_strava.py -> Strava API: GET /activities/{id}/streams (bounded recent backfill)
+fetch_strava.py -> data/: write activities_raw.json + activities.geojson + activity_streams/* + fitness_analysis.json
 fetch_strava.py -> server.js: exit 0, stdout
 server.js -> Browser: 200 { status: "ok", output }
 Browser -> server.js: GET /data/activities.geojson?ts=...
 Browser -> server.js: GET /data/activities_raw.json?ts=...
+Browser -> server.js: GET /data/fitness_analysis.json?ts=...
 server.js -> Browser: updated cached files
-Browser: re-render map + stats
+Browser: re-render dashboard + analysis data
 ```
 
 ## Components
@@ -85,10 +98,13 @@ Browser: re-render map + stats
   - Refresh access tokens using `STRAVA_REFRESH_TOKEN`.
   - Pull paginated activities from Strava.
   - Merge with cached activities by activity id.
-  - Emit raw JSON and GeoJSON outputs.
+  - Backfill detailed per-activity stream data for recent missing HR-enabled runs.
+  - Emit raw JSON, GeoJSON, and analysis outputs.
 - Outputs:
   - `data/activities_raw.json` (array of Strava activity objects).
   - `data/activities.geojson` (FeatureCollection of LineString routes).
+  - `data/activity_streams/<activity_id>.json`
+  - `data/fitness_analysis.json`
 - Incremental behavior:
   - If cache exists and `--after` is omitted, uses the latest cached activity timestamp.
   - Guards against future timestamps when computing `after`.
@@ -106,6 +122,7 @@ Browser: re-render map + stats
 - Responsibilities:
   - Serves static files from repo root and `/web/`.
   - `POST /refresh` runs `fetch_strava.py` to update the cache.
+  - `GET /activity-stream?id=<activity_id>` returns a cached stream file or fetches and caches it on demand for the dashboard.
   - `GET /quote` proxies a quote API to avoid browser CORS issues.
 - Runtime behavior:
   - Chooses Python runtime in order: `.venv/bin/python3`, `FETCH_PYTHON`, `python3`.
@@ -116,13 +133,22 @@ Browser: re-render map + stats
   - `FETCH_PYTHON` (optional override for Python path)
 
 ### 3) Frontend (Static)
-- Entry point: `web/index.html` (redirected from root `index.html`).
+- Entry points:
+  - `web/index.html`
+  - `web/analysis.html`
 - Responsibilities:
-  - Load `data/activities.geojson` and `data/activities_raw.json`.
-  - Render a Leaflet map with heat and line layers.
-  - Build a 12-month calendar heatmap of daily minutes.
-  - Compute stats: total activities, minutes, recent activity counts, latest route.
-  - Display a daily motivation quote (local fallback or `/quote` proxy).
+  - Dashboard:
+    - load `data/activities.geojson` and `data/activities_raw.json`
+    - render a Leaflet map with heat and line layers
+    - build a 12-month calendar heatmap of daily minutes
+    - compute stats and latest route
+    - inspect individual runs with detailed HR/pace if a stream is cached or fetched on demand
+  - Analysis:
+    - load `data/fitness_analysis.json`
+    - render a combined multi-zone fitness chart and a separate efficiency chart
+    - show methodology, caveats, and source mix
+    - support mouse-driven zoom with a visible selection band, auto-filled start/end fields, and reset/double-click reset
+  - Display a daily motivation quote (local fallback or `/quote` proxy) on the dashboard.
 - Libraries:
   - Leaflet + Leaflet.heat for mapping layers.
   - Chart.js for the cumulative minutes chart.
@@ -143,12 +169,33 @@ Browser: re-render map + stats
   - `properties` include:
     - `id`, `name`, `type`, `start_date`, `distance_m`, `moving_time_s`, `elapsed_time_s`, `elevation_gain_m`
 
+### `data/activity_streams/<activity_id>.json`
+- JSON payload containing:
+  - `activity_id`
+  - `fetched_at`
+  - `keys_requested`
+  - `streams` keyed by Strava stream name (`heartrate`, `time`, `distance`, `velocity_smooth`, `moving`)
+- Used by the dashboard’s per-run detailed HR/pace inspector and by analysis generation when stream data is available.
+
+### `data/fitness_analysis.json`
+- JSON artifact containing:
+  - `methodology_version`
+  - `source_policy`
+  - `comparability_rule`
+  - `coverage`
+  - `series`
+  - `caveats`
+- Used by `web/analysis.html`.
+
 ## API / Routes
 - `GET /` -> `index.html` (redirects to `/web/`).
 - `GET /web/` -> UI.
+- `GET /web/analysis.html` -> analysis UI.
 - `GET /data/activities.geojson` -> heatmap source.
 - `GET /data/activities_raw.json` -> stats source.
+- `GET /data/fitness_analysis.json` -> analysis source.
 - `POST /refresh` -> runs fetcher, returns JSON `{ status, output }`.
+- `GET /activity-stream?id=<activity_id>` -> dashboard-facing detailed stream route; returns cached stream JSON or fetches it on demand.
 - `GET /quote` -> returns JSON payload from zenquotes proxy.
 - `GET /api/latest` -> returns the latest cached activity.
 - `GET /api/date?date=YYYY-MM-DD` -> returns activities for the given date.
@@ -157,6 +204,10 @@ Browser: re-render map + stats
 - Set `API_KEY` on the server to require authentication.
 - Supply the key via `X-API-Key` header or `api_key` query param.
 - If `API_KEY` is unset, the API routes are open.
+
+Notes:
+- `/activity-stream` is intentionally outside the `API_KEY`-protected `/api/*` namespace so the dashboard can fetch per-run detailed streams without embedding the key in the page.
+- `/api/*` remains protected when `API_KEY` is set.
 
 Example (bash):
 ```bash
@@ -224,6 +275,7 @@ Notes:
   - `python fetch_strava.py --after 2024-01-01`
 - Serve UI:
   - `npm run serve` (or `node server.js`).
+  - analysis page: `http://localhost:8000/web/analysis.html`
 
 ### Optional Helpers
 - `scripts/start_local.sh` and `scripts/deploy_local.sh` bootstrap local env + fetch + serve.

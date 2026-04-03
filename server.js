@@ -9,10 +9,10 @@ const { spawn } = require("child_process");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 const ROOT = path.resolve(__dirname);
-const WEB_ROOT = path.join(ROOT, "web");
 const VENV_PY = path.join(ROOT, ".venv", "bin", "python3");
 const API_KEY = process.env.API_KEY || "";
 const RAW_CACHE = path.join(ROOT, "data", "activities_raw.json");
+const STREAM_CACHE_DIR = path.join(ROOT, "data", "activity_streams");
 
 const MIME = {
   ".html": "text/html",
@@ -73,6 +73,14 @@ function readCachedActivities() {
   }
 }
 
+function hasSummaryHeartRate(activity) {
+  return activity && (activity.average_heartrate != null || activity.max_heartrate != null);
+}
+
+function streamCachePath(activityId) {
+  return path.join(STREAM_CACHE_DIR, `${activityId}.json`);
+}
+
 function filterActivitiesByDate(activities, date) {
   if (!date) return [];
   return activities.filter((act) => (act.start_date || "").startsWith(date));
@@ -91,9 +99,13 @@ function latestActivity(activities) {
 }
 
 function runFetcher() {
+  return runFetcherWithArgs(["fetch_strava.py"]);
+}
+
+function runFetcherWithArgs(args) {
   const pythonCmd = process.env.FETCH_PYTHON || (fs.existsSync(VENV_PY) ? VENV_PY : "python3");
   return new Promise((resolve, reject) => {
-    const proc = spawn(pythonCmd, ["fetch_strava.py"], {
+    const proc = spawn(pythonCmd, args, {
       cwd: ROOT,
       env: process.env,
     });
@@ -114,6 +126,66 @@ function runFetcher() {
       }
     });
   });
+}
+
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+async function ensureActivityStream(activityId, activities) {
+  const cachedPath = streamCachePath(activityId);
+  if (fs.existsSync(cachedPath)) {
+    return readJsonFile(cachedPath);
+  }
+
+  const activity = activities.find((act) => Number(act.id) === Number(activityId));
+  if (!activity) {
+    throw new Error("activity_not_found");
+  }
+  if (activity.type !== "Run") {
+    throw new Error("not_run");
+  }
+  if (!hasSummaryHeartRate(activity)) {
+    throw new Error("no_summary_hr");
+  }
+
+  await runFetcherWithArgs(["fetch_strava.py", "--stream-activity-id", String(activityId)]);
+  if (!fs.existsSync(cachedPath)) {
+    throw new Error("stream_cache_missing");
+  }
+  return readJsonFile(cachedPath);
+}
+
+async function handleActivityStreamRequest(req, res, url) {
+  const activityIdRaw = url.searchParams.get("id") || "";
+  const activityId = Number(activityIdRaw);
+  if (!activityIdRaw || !Number.isFinite(activityId)) {
+    send(res, 400, JSON.stringify({ error: "missing_or_invalid_id" }), {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    });
+    return true;
+  }
+  const activities = readCachedActivities();
+  try {
+    const payload = await ensureActivityStream(activityId, activities);
+    send(res, 200, JSON.stringify(payload), {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "no-cache",
+    });
+  } catch (err) {
+    const message = err && err.message ? err.message : String(err);
+    const status =
+      message === "activity_not_found" ? 404 :
+      message === "not_run" || message === "no_summary_hr" ? 409 :
+      500;
+    send(res, status, JSON.stringify({ error: message }), {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    });
+  }
+  return true;
 }
 
 async function proxyQuote(res) {
@@ -194,6 +266,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url.startsWith("/quote")) {
     return proxyQuote(res);
+  }
+
+  if (req.url.startsWith("/activity-stream")) {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    return handleActivityStreamRequest(req, res, url);
   }
 
   if (req.url.startsWith("/api/")) {

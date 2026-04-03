@@ -69,6 +69,17 @@
       line-height: 1.5;
     }
     .stats { display: flex; gap: 16px; margin-left: auto; flex-wrap: wrap; }
+    .header-nav {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      background: rgba(5, 8, 15, 0.38);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
     .stat { padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); min-width: 140px; }
     .stat span { display: block; font-size: 20px; font-weight: 600; }
     .stat label { color: var(--muted); font-size: 12px; letter-spacing: 0.2px; }
@@ -79,16 +90,23 @@
     .card-header h2 { margin: 0; font-size: 16px; letter-spacing: 0.2px; }
     #map { width: 100%; height: 50vh; min-height: 300px; }
     .pill {
-      padding: 6px 10px;
-      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border: 1px solid transparent;
       border-radius: 10px;
-      background: rgba(255,255,255,0.03);
+      background: transparent;
       display: inline-flex;
       gap: 8px;
       align-items: center;
       color: var(--fg);
       font-size: 13px;
       cursor: pointer;
+      text-decoration: none;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+    .pill.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(255,124,67,0.35);
     }
     .controls {
       display: flex;
@@ -140,6 +158,12 @@
       transition: transform 120ms ease, box-shadow 120ms ease;
     }
     .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(0,0,0,0.25); }
+    a.btn-link {
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
     .layout {
       display: grid;
       grid-template-columns: 1fr;
@@ -159,12 +183,104 @@
     .latest .muted { font-size: 12px; }
     .motivation { padding: 12px 16px; }
     .badge { padding: 2px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+    .run-list {
+      min-height: 320px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.02);
+      overflow: hidden;
+    }
+    .run-list-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .run-list-items {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      max-height: 560px;
+      overflow-y: auto;
+    }
+    .run-item {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      cursor: pointer;
+      text-align: left;
+      color: var(--fg);
+    }
+    .run-item:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 18px rgba(0,0,0,0.18);
+    }
+    .run-item.is-active {
+      border-color: rgba(255,124,67,0.55);
+      background: rgba(255,124,67,0.10);
+    }
+    .run-item .title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .run-item .meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .hr-detail {
+      padding: 12px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .detail-stat {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+    }
+    .detail-stat .value {
+      display: block;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .detail-stat label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .hr-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .hr-chart-wrap {
+      height: 260px;
+    }
+    .hr-chart-wrap canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .hidden {
+      display: none !important;
+    }
     @media (max-width: 980px) {
       main { grid-template-columns: 1fr; }
       #map { height: 50vh; }
       header { flex-direction: column; align-items: flex-start; }
+      .header-nav { margin-left: 0; }
       .stats { margin-left: 0; }
       .two-col { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -192,6 +308,10 @@
         <div class="delta" id="stat-streak">Keep it up!</div>
       </div>
     </div>
+    <nav class="header-nav" aria-label="Page navigation">
+      <a class="pill active" href="/web/">Dashboard</a>
+      <a class="pill" href="/web/analysis.html">Analysis</a>
+    </nav>
   </header>
 
   <main>
@@ -274,6 +394,51 @@
         </div>
       </div>
     </section>
+
+    <section class="two-col">
+      <div class="card">
+        <div class="card-header">
+          <h2>Runs</h2>
+          <span class="muted" id="runs-meta">Loading…</span>
+        </div>
+        <div class="run-list">
+          <div class="run-list-header">
+            <strong>Run History</strong>
+            <span class="muted" id="runs-total-count">0</span>
+          </div>
+          <div class="run-list-items" id="runs-list">
+            <div class="muted">Loading…</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>Detailed Run Metrics</h2>
+          <span class="muted" id="hr-detail-date">—</span>
+        </div>
+        <div class="hr-detail">
+          <div id="hr-detail-title" class="title">Select a run</div>
+          <div class="detail-grid">
+            <div class="detail-stat">
+              <span class="value" id="hr-detail-avg">—</span>
+              <label>Average HR</label>
+            </div>
+            <div class="detail-stat">
+              <span class="value" id="hr-detail-max">—</span>
+              <label>Max HR</label>
+            </div>
+            <div class="detail-stat">
+              <span class="value" id="hr-detail-stream">—</span>
+              <label>Detailed Stream</label>
+            </div>
+          </div>
+          <div class="hr-note" id="hr-detail-note">Choose a recent run to inspect summary and detailed heart-rate availability.</div>
+          <div class="hr-chart-wrap hidden" id="hr-chart-wrap">
+            <canvas id="hr-detail-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script
@@ -303,8 +468,21 @@
     const latestDateEl = document.getElementById("latest-date");
     const moodEl = document.getElementById("mood");
     const motivationTextEl = document.getElementById("motivation-text");
+    const runsMetaEl = document.getElementById("runs-meta");
+    const runsTotalCountEl = document.getElementById("runs-total-count");
+    const runsListEl = document.getElementById("runs-list");
+    const hrDetailDateEl = document.getElementById("hr-detail-date");
+    const hrDetailTitleEl = document.getElementById("hr-detail-title");
+    const hrDetailAvgEl = document.getElementById("hr-detail-avg");
+    const hrDetailMaxEl = document.getElementById("hr-detail-max");
+    const hrDetailStreamEl = document.getElementById("hr-detail-stream");
+    const hrDetailNoteEl = document.getElementById("hr-detail-note");
+    const hrDetailChartCtx = document.getElementById("hr-detail-chart");
+    const hrChartWrapEl = document.getElementById("hr-chart-wrap");
 
     let map, heatLayer, lineLayer, latestLineLayer;
+    let hrDetailChart = null;
+    let selectedRunId = null;
 
     const quotes = [
       { mood: "On fire", text: "The miracle isn’t that I finished. The miracle is that I had the courage to start.", author: "John Bingham" },
@@ -614,12 +792,244 @@
       return `${km.toFixed(1)} km`;
     }
 
+    function formatHeartRate(value) {
+      if (!value && value !== 0) return "—";
+      return `${Math.round(value)} bpm`;
+    }
+
     function formatDuration(seconds) {
       if (!seconds && seconds !== 0) return "—";
       const h = Math.floor(seconds / 3600);
       const m = Math.round((seconds % 3600) / 60);
       if (h === 0) return `${m} min`;
       return `${h}h ${m}m`;
+    }
+
+    function hasSummaryHeartRate(act) {
+      return act && (act.average_heartrate != null || act.max_heartrate != null);
+    }
+
+    function getRuns(raw) {
+      const runs = raw
+        .filter((act) => act.type === "Run")
+        .sort((a, b) => Date.parse(b.start_date || "") - Date.parse(a.start_date || ""));
+      return runs;
+    }
+
+    function formatRunMeta(act) {
+      const date = act.start_date ? act.start_date.slice(0, 10) : "—";
+      const base = `${date} • ${formatDistance(act.distance)} • ${formatDuration(act.moving_time)}`;
+      if (!hasSummaryHeartRate(act)) return `${base} • no HR`;
+      return `${base} • avg ${formatHeartRate(act.average_heartrate)} • max ${formatHeartRate(act.max_heartrate)}`;
+    }
+
+    function renderRunList(runs, selectedId) {
+      runsListEl.innerHTML = "";
+      if (!runs.length) {
+        runsListEl.innerHTML = '<div class="muted">No runs available yet.</div>';
+        return;
+      }
+      runs.forEach((act) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "run-item";
+        if (act.id === selectedId) {
+          btn.classList.add("is-active");
+        }
+        const hrBadge = hasSummaryHeartRate(act) ? "HR" : "No HR";
+        btn.innerHTML = `
+          <div class="title">${act.name || "Untitled run"}</div>
+          <div class="meta">${formatRunMeta(act)} • ${hrBadge}</div>
+        `;
+        btn.addEventListener("click", () => {
+          selectedRunId = act.id;
+          renderRunHeartRatePanel(act, null, false);
+          renderRunCoverage(currentRawActivities);
+          loadDetailedStream(act).catch((err) => {
+            console.error(err);
+          });
+        });
+        runsListEl.appendChild(btn);
+      });
+    }
+
+    function setHrChartData(labels, heartRateValues, paceValues) {
+      const ctx = hrDetailChartCtx.getContext("2d");
+      const config = {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Heart rate",
+              data: heartRateValues,
+              borderColor: "#ff7c43",
+              backgroundColor: "rgba(255,124,67,0.12)",
+              fill: false,
+              tension: 0.2,
+              pointRadius: 0,
+              yAxisID: "yHr",
+            },
+            {
+              label: "Pace",
+              data: paceValues,
+              borderColor: "#7ce7c8",
+              backgroundColor: "rgba(124,231,200,0.12)",
+              fill: false,
+              tension: 0.2,
+              pointRadius: 0,
+              yAxisID: "yPace",
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true },
+            tooltip: {
+              callbacks: {
+                label: (item) => {
+                  if (item.dataset.yAxisID === "yHr") {
+                    return `${Math.round(item.parsed.y)} bpm`;
+                  }
+                  return `${Number(item.parsed.y).toFixed(2)} min/km`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 8 },
+              grid: { display: false },
+            },
+            yHr: {
+              position: "left",
+              ticks: { maxTicksLimit: 6 },
+              grid: { color: "#1a2233" },
+            },
+            yPace: {
+              position: "right",
+              reverse: true,
+              ticks: {
+                maxTicksLimit: 6,
+                callback: (value) => `${Number(value).toFixed(1)}`,
+              },
+              grid: { drawOnChartArea: false },
+            },
+          },
+        },
+      };
+      if (!hrDetailChart) {
+        hrDetailChart = new Chart(hrDetailChartCtx, config);
+      } else {
+        hrDetailChart.data.labels = labels;
+        hrDetailChart.data.datasets[0].data = heartRateValues;
+        hrDetailChart.data.datasets[1].data = paceValues;
+        hrDetailChart.update();
+      }
+      hrChartWrapEl.classList.remove("hidden");
+    }
+
+    function clearHrChart() {
+      hrChartWrapEl.classList.add("hidden");
+      if (!hrDetailChart) return;
+      hrDetailChart.data.labels = [];
+      hrDetailChart.data.datasets[0].data = [];
+      hrDetailChart.data.datasets[1].data = [];
+      hrDetailChart.update();
+    }
+
+    function renderRunHeartRatePanel(act, streamPayload, isLoading) {
+      hrDetailTitleEl.textContent = act?.name || "Select a run";
+      hrDetailDateEl.textContent = act?.start_date ? act.start_date.slice(0, 10) : "—";
+      hrDetailAvgEl.textContent = formatHeartRate(act?.average_heartrate);
+      hrDetailMaxEl.textContent = formatHeartRate(act?.max_heartrate);
+      if (!act) {
+        hrDetailStreamEl.textContent = "—";
+        hrDetailNoteEl.textContent = "Choose a recent run to inspect summary and detailed heart-rate availability.";
+        clearHrChart();
+        return;
+      }
+
+      if (isLoading) {
+        hrDetailStreamEl.textContent = "Checking…";
+        hrDetailNoteEl.textContent = "Looking for a cached detailed heart-rate stream for this run.";
+        clearHrChart();
+        return;
+      }
+
+      const hrStream = streamPayload?.streams?.heartrate?.data || [];
+      const timeStream = streamPayload?.streams?.time?.data || [];
+      const velocityStream = streamPayload?.streams?.velocity_smooth?.data || [];
+      if (hrStream.length) {
+        hrDetailStreamEl.textContent = `${hrStream.length} pts`;
+        hrDetailNoteEl.textContent = "Detailed heart-rate and pace streams loaded from the local cache created during refresh.";
+        const labels = hrStream.map((_, idx) => {
+          const seconds = Number(timeStream[idx] || 0);
+          const mins = Math.floor(seconds / 60);
+          const secs = Math.floor(seconds % 60);
+          return `${mins}:${String(secs).padStart(2, "0")}`;
+        });
+        const paceValues = hrStream.map((_, idx) => {
+          const velocity = Number(velocityStream[idx] || 0);
+          if (!velocity) return null;
+          return 1000 / velocity / 60;
+        });
+        setHrChartData(labels, hrStream, paceValues);
+        return;
+      }
+
+      hrDetailStreamEl.textContent = "Not cached";
+      hrDetailNoteEl.textContent = hasSummaryHeartRate(act)
+        ? "This run has summary heart-rate fields, but no detailed stream cache file is available yet, so no graph is shown."
+        : "This run does not have heart-rate data in the summary activity, so no graph is shown.";
+      clearHrChart();
+    }
+
+    async function loadDetailedStream(act) {
+      if (!act || !act.id) return;
+      if (!hasSummaryHeartRate(act)) {
+        renderRunHeartRatePanel(act, null, false);
+        return;
+      }
+      renderRunHeartRatePanel(act, null, true);
+      let res = await fetch(bust(`../data/activity_streams/${act.id}.json`));
+      if (!res.ok) {
+        res = await fetch(`/activity-stream?id=${encodeURIComponent(act.id)}`);
+      }
+      if (!res.ok) {
+        renderRunHeartRatePanel(act, null, false);
+        return;
+      }
+      const payload = await res.json();
+      renderRunHeartRatePanel(act, payload, false);
+    }
+
+    let currentRawActivities = [];
+
+    function renderRunCoverage(raw) {
+      currentRawActivities = raw;
+      const runs = getRuns(raw);
+      const hrCount = runs.filter(hasSummaryHeartRate).length;
+      runsTotalCountEl.textContent = `${runs.length}`;
+      runsMetaEl.textContent = `${hrCount} with HR • ${runs.length - hrCount} without HR`;
+      if (!selectedRunId && runs.length) {
+        selectedRunId = runs[0].id;
+      }
+      const selectedAct = runs.find((act) => act.id === selectedRunId) || runs[0] || null;
+      if (selectedAct) {
+        selectedRunId = selectedAct.id;
+      }
+      renderRunList(runs, selectedRunId);
+      renderRunHeartRatePanel(selectedAct, null, Boolean(selectedAct && hasSummaryHeartRate(selectedAct)));
+      if (selectedAct) {
+        loadDetailedStream(selectedAct).catch((err) => {
+          console.error(err);
+        });
+      } else {
+        renderRunHeartRatePanel(null, null, false);
+      }
     }
 
     function renderLatest(latest) {
@@ -719,6 +1129,7 @@
       renderLatest(recent.latest);
       renderMotivation(recent.activeDays7, recent.activities30);
       addLatestHighlight(recent.latest, geo);
+      renderRunCoverage(raw);
       fetchDailyQuote().catch(() => {});
     }
 
@@ -759,8 +1170,14 @@
         if (!res.ok) {
           throw new Error(payload.error || res.statusText);
         }
-        metaEl.textContent = "Fetch complete, reloading…";
+        const output = String(payload.output || "");
+        const rangeMatch = output.match(/Detailed HR stream dates now available:\s+(.+)/);
+        const rangeMessage = rangeMatch
+          ? `Refresh complete. Detailed HR now available for: ${rangeMatch[1]}`
+          : "Refresh complete, reloading…";
+        metaEl.textContent = rangeMessage;
         await refresh();
+        metaEl.textContent = rangeMessage;
       } catch (err) {
         console.error(err);
         metaEl.textContent = `Fetch failed: ${err.message || err}`;

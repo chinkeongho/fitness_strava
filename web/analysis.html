@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strava Fitness Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #05080f;
+      --card: rgba(14, 22, 33, 0.78);
+      --fg: #e8edf5;
+      --muted: #97a0b0;
+      --accent: #ff7c43;
+      --teal: #7ce7c8;
+      --accent-soft: rgba(255,124,67,0.12);
+      --border: #1a2233;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Inter", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 18% 18%, rgba(255,124,67,0.08), transparent 34%),
+                  radial-gradient(circle at 82% 0%, rgba(124,231,200,0.10), transparent 28%),
+                  var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+    }
+    header {
+      padding: 24px 28px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(255,124,67,0.12), rgba(124,231,200,0.08));
+    }
+    h1 { margin: 6px 0 8px; font-size: 24px; }
+    .eyebrow { text-transform: uppercase; letter-spacing: 1.2px; font-size: 11px; color: var(--muted); }
+    .lead { margin: 0; color: var(--muted); max-width: 760px; line-height: 1.5; }
+    .nav {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      background: rgba(5, 8, 15, 0.38);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .pill {
+      padding: 7px 12px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--fg);
+      text-decoration: none;
+      font-size: 13px;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+    .pill.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(255,124,67,0.35);
+    }
+    main {
+      padding: 20px 24px 28px;
+      display: grid;
+      gap: 18px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .zoom-controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .zoom-fields {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .zoom-fields label {
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .zoom-fields input {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--fg);
+      min-width: 145px;
+    }
+    .zoom-btn {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05);
+      color: var(--fg);
+      cursor: pointer;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 14px 35px rgba(0,0,0,0.25);
+    }
+    .stat { padding: 14px 16px; }
+    .stat .value { display: block; font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+    .stat label { color: var(--muted); font-size: 12px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .card-header {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .card-header h2 { margin: 0; font-size: 16px; }
+    .header-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .muted { color: var(--muted); font-size: 13px; }
+    .explain-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .explain-label {
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,124,67,0.35);
+      background: rgba(255,124,67,0.08);
+      color: var(--accent);
+      font-size: 12px;
+      cursor: help;
+      user-select: none;
+    }
+    .explain-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: min(320px, 78vw);
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(9, 14, 23, 0.98);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px);
+      transition: opacity 120ms ease, transform 120ms ease;
+      z-index: 10;
+    }
+    .explain-wrap:hover .explain-popover,
+    .explain-wrap:focus-within .explain-popover {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .chart-wrap {
+      padding: 14px 16px 6px;
+      height: 320px;
+    }
+    .chart-canvas-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .chart-wrap canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .selection-band {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(255, 124, 67, 0.18);
+      border: 1px solid rgba(255, 124, 67, 0.45);
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 80ms ease;
+    }
+    .selection-band.is-active {
+      opacity: 1;
+    }
+    .note {
+      padding: 0 16px 16px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 13px;
+    }
+    .methodology {
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 10px;
+    }
+    .item {
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+    }
+    .item strong { display: block; margin-bottom: 4px; }
+    ul.caveats {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+    @media (max-width: 980px) {
+      header { flex-direction: column; align-items: flex-start; }
+      .nav { margin-left: 0; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="eyebrow">Strava fitness analysis</div>
+      <h1>Fitness & Efficiency Trends</h1>
+      <p class="lead">Longitudinal analysis of comparable runs using a versioned source policy. Detailed streams are preferred when available, summary fallback is used only under the named v1 rule, and each chart surfaces the source mix for the hovered or latest window.</p>
+    </div>
+    <nav class="nav">
+      <a class="pill" href="./">Dashboard</a>
+      <a class="pill active" href="./analysis.html">Analysis</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="stats">
+      <div class="card stat">
+        <span class="value" id="stat-total">0</span>
+        <label>Total runs</label>
+      </div>
+      <div class="card stat">
+        <span class="value" id="stat-comparable">0</span>
+        <label>Comparable runs</label>
+      </div>
+      <div class="card stat">
+        <span class="value" id="stat-stream">0</span>
+        <label>Stream-backed runs</label>
+      </div>
+      <div class="card stat">
+        <span class="value" id="stat-summary">0</span>
+        <label>Summary fallback runs</label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Date Zoom</h2>
+        <span class="muted" id="zoom-meta">All dates</span>
+      </div>
+      <div class="methodology">
+        <div class="zoom-controls">
+          <span class="muted">Drag across either chart to zoom the date range.</span>
+          <div class="zoom-fields">
+            <label>
+              Start date
+              <input type="text" id="zoom-start" placeholder="Not set" readonly>
+            </label>
+            <label>
+              End date
+              <input type="text" id="zoom-end" placeholder="Not set" readonly>
+            </label>
+          </div>
+          <button class="zoom-btn" id="zoom-reset" type="button">Reset Zoom</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="header-group">
+            <h2>Fitness Trend</h2>
+            <div class="explain-wrap">
+              <span class="explain-label" tabindex="0">Explain</span>
+              <div class="explain-popover">Shows speed over time for each heart-rate zone in one graph. Detailed-stream runs use moving samples after minute 8 that fall inside each zone. Summary fallback uses the whole-run average speed only when the whole-run average heart rate falls inside that zone.</div>
+            </div>
+          </div>
+          <span class="muted">Speed shown in km/h</span>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-canvas-wrap">
+            <canvas id="fitness-zones-chart"></canvas>
+            <div class="selection-band" id="fitness-selection-band"></div>
+          </div>
+        </div>
+        <div class="note" id="fitness-zones-note">Loading…</div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="header-group">
+            <h2>Efficiency at HR</h2>
+            <div class="explain-wrap">
+              <span class="explain-label" tabindex="0">Explain</span>
+              <div class="explain-popover">Shows speed per beat of heart rate over time. Higher values usually mean you are moving faster for the same cardiovascular cost. Detailed-stream runs use moving samples after minute 8; fallback uses whole-run average speed divided by whole-run average heart rate.</div>
+            </div>
+          </div>
+          <span class="muted" id="efficiency-meta">Loading…</span>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-canvas-wrap">
+            <canvas id="efficiency-chart"></canvas>
+            <div class="selection-band" id="efficiency-selection-band"></div>
+          </div>
+        </div>
+        <div class="note" id="efficiency-note">Loading…</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Methodology</h2>
+        <span class="muted" id="methodology-version">—</span>
+      </div>
+      <div class="methodology">
+        <div class="item">
+          <strong>Source policy</strong>
+          <div class="muted" id="source-policy">—</div>
+        </div>
+        <div class="item">
+          <strong>Comparability rule</strong>
+          <div class="muted" id="comparability-rule">—</div>
+        </div>
+        <div class="item">
+          <strong>Caveats</strong>
+          <ul class="caveats" id="caveats-list"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const statTotal = document.getElementById("stat-total");
+    const statComparable = document.getElementById("stat-comparable");
+    const statStream = document.getElementById("stat-stream");
+    const statSummary = document.getElementById("stat-summary");
+    const fitnessZonesCtx = document.getElementById("fitness-zones-chart");
+    const fitnessZonesNote = document.getElementById("fitness-zones-note");
+    const fitnessSelectionBand = document.getElementById("fitness-selection-band");
+    const zoomMeta = document.getElementById("zoom-meta");
+    const zoomStart = document.getElementById("zoom-start");
+    const zoomEnd = document.getElementById("zoom-end");
+    const zoomReset = document.getElementById("zoom-reset");
+    const efficiencyMeta = document.getElementById("efficiency-meta");
+    const efficiencyNote = document.getElementById("efficiency-note");
+    const efficiencySelectionBand = document.getElementById("efficiency-selection-band");
+    const methodologyVersion = document.getElementById("methodology-version");
+    const sourcePolicy = document.getElementById("source-policy");
+    const comparabilityRule = document.getElementById("comparability-rule");
+    const caveatsList = document.getElementById("caveats-list");
+    const efficiencyCtx = document.getElementById("efficiency-chart");
+    let fitnessZonesChart = null;
+    let efficiencyChart = null;
+    let currentAnalysis = null;
+    let currentRange = { start: "", end: "" };
+
+    function bust(url) {
+      return `${url}?t=${Date.now()}`;
+    }
+
+    function describeSourceMix(point) {
+      const mix = point?.source_mix || {};
+      return `${mix.stream_points || 0} stream, ${mix.summary_points || 0} summary, ${mix.excluded_points || 0} excluded`;
+    }
+
+    function displayUnit(series) {
+      if (series?.unit === "m_per_min") return "km/h";
+      if (series?.unit === "m_per_min_per_bpm") return "km/h/bpm";
+      return series?.unit || "";
+    }
+
+    function displayValue(series, value) {
+      if (value == null) return value;
+      if (series?.unit === "m_per_min" || series?.unit === "m_per_min_per_bpm") {
+        return Number((value * 0.06).toFixed(series?.unit === "m_per_min" ? 2 : 4));
+      }
+      return value;
+    }
+
+    function sourcePolicyText(policy) {
+      if (!policy?.name) return "—";
+      if (policy.name === "stream_preferred_summary_fallback_v1") {
+        return "Prefer detailed heart-rate stream data when available; otherwise use summary activity data.";
+      }
+      return policy.name;
+    }
+
+    function comparabilityRuleText(rule) {
+      if (!rule) return "—";
+      const distance = rule.distance_m || [];
+      const moving = rule.moving_time_s || [];
+      const minKm = distance[0] != null ? distance[0] / 1000 : null;
+      const maxKm = distance[1] != null ? distance[1] / 1000 : null;
+      const minMin = moving[0] != null ? moving[0] / 60 : null;
+      const maxMin = moving[1] != null ? moving[1] / 60 : null;
+      return `This analysis includes only comparable outdoor runs: not recorded on a trainer, at least ${minKm} km and at most ${maxKm} km, moving time between ${minMin} and ${maxMin} minutes, and valid non-zero speed.`;
+    }
+
+    function setSeriesNote(el, point, label) {
+      if (!point) {
+        el.textContent = `No ${label.toLowerCase()} windows meet the minimum-run threshold yet.`;
+        return;
+      }
+      el.textContent = `Window ${point.window_start} to ${point.window_end}: ${displayValue(point, point.value)} ${displayUnit(point)}. Source mix: ${describeSourceMix(point)}.`;
+    }
+
+    function yScaleBounds(values) {
+      const numeric = values.filter((value) => typeof value === "number" && !Number.isNaN(value));
+      if (!numeric.length) return {};
+      const min = Math.min(...numeric);
+      const max = Math.max(...numeric);
+      if (min === max) {
+        const padding = min === 0 ? 1 : Math.abs(min) * 0.1;
+        return { min: min - padding, max: max + padding };
+      }
+      const padding = (max - min) * 0.12;
+      return { min: min - padding, max: max + padding };
+    }
+
+    function renderSeriesChart(canvas, metaEl, noteEl, label, color, series) {
+      const points = filterPointsByDate(series?.points || []);
+      const dataValues = points.map((point) => displayValue(series, point.value));
+      metaEl.textContent = points.length ? `Shown in ${displayUnit(series)}` : "No data";
+      setSeriesNote(noteEl, points[points.length - 1], label);
+      const bounds = yScaleBounds(dataValues);
+      const config = {
+        type: "line",
+        data: {
+          labels: points.map((point) => point.window_end),
+          datasets: [
+            {
+              label,
+              data: dataValues,
+              borderColor: color,
+              backgroundColor: `${color}22`,
+              fill: true,
+              tension: 0.25,
+              pointRadius: 2,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const point = points[items[0].dataIndex];
+                  return `${point.window_start} to ${point.window_end}`;
+                },
+                label: (item) => `${item.parsed.y} ${displayUnit(series)}`,
+                afterLabel: (item) => `Source mix: ${describeSourceMix(points[item.dataIndex])}`,
+              },
+            },
+          },
+          onHover: (_, elements) => {
+            if (!elements.length) {
+              setSeriesNote(noteEl, points[points.length - 1], label);
+              return;
+            }
+            setSeriesNote(noteEl, points[elements[0].index], label);
+          },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 8 },
+              grid: { display: false },
+            },
+            y: {
+              min: bounds.min,
+              max: bounds.max,
+              ticks: { maxTicksLimit: 6 },
+              grid: { color: "#1a2233" },
+            },
+          },
+        },
+      };
+      if (canvas === efficiencyCtx) {
+        if (!efficiencyChart) {
+          efficiencyChart = new Chart(canvas, config);
+          attachDragZoom(efficiencyChart);
+        } else {
+          efficiencyChart.data = config.data;
+          efficiencyChart.options = config.options;
+          efficiencyChart.update();
+        }
+        return efficiencyChart;
+      }
+      return new Chart(canvas, config);
+    }
+
+    function filterPointsByDate(points) {
+      if (!currentRange.start && !currentRange.end) return points;
+      return points.filter((point) => {
+        if (currentRange.start && point.window_end < currentRange.start) return false;
+        if (currentRange.end && point.window_start > currentRange.end) return false;
+        return true;
+      });
+    }
+
+    function updateZoomMeta() {
+      if (!currentRange.start && !currentRange.end) {
+        zoomMeta.textContent = "All dates";
+        zoomStart.value = "";
+        zoomEnd.value = "";
+        return;
+      }
+      zoomMeta.textContent = `${currentRange.start || "start"} to ${currentRange.end || "end"}`;
+      zoomStart.value = currentRange.start || "";
+      zoomEnd.value = currentRange.end || "";
+    }
+
+    function updateSelectionBand(chart, bandEl, startX, currentX) {
+      if (!chart?.chartArea || !bandEl) return;
+      const left = chart.chartArea.left;
+      const right = chart.chartArea.right;
+      const start = Math.max(left, Math.min(right, startX));
+      const end = Math.max(left, Math.min(right, currentX));
+      const minX = Math.min(start, end);
+      const maxX = Math.max(start, end);
+      bandEl.style.left = `${minX}px`;
+      bandEl.style.width = `${Math.max(2, maxX - minX)}px`;
+      bandEl.style.top = `${chart.chartArea.top}px`;
+      bandEl.style.height = `${Math.max(0, chart.chartArea.bottom - chart.chartArea.top)}px`;
+      bandEl.classList.add("is-active");
+    }
+
+    function clearSelectionBand(bandEl) {
+      if (!bandEl) return;
+      bandEl.classList.remove("is-active");
+      bandEl.style.width = "0px";
+    }
+
+    function updatePendingRange(chart, startX, currentX) {
+      const labels = chart.data.labels || [];
+      if (labels.length < 2) return;
+      const startIdx = labelIndexForPointer(chart, startX);
+      const endIdx = labelIndexForPointer(chart, currentX);
+      if (startIdx < 0 || endIdx < 0) return;
+      const minIdx = Math.min(startIdx, endIdx);
+      const maxIdx = Math.max(startIdx, endIdx);
+      zoomMeta.textContent = `Selecting ${labels[minIdx]} to ${labels[maxIdx]}`;
+      zoomStart.value = labels[minIdx];
+      zoomEnd.value = labels[maxIdx];
+    }
+
+    function labelIndexForPointer(chart, pointerX) {
+      const labels = chart.data.labels || [];
+      if (!labels.length || !chart.chartArea) return -1;
+      const left = chart.chartArea.left;
+      const right = chart.chartArea.right;
+      const clamped = Math.max(left, Math.min(right, pointerX));
+      const ratio = (clamped - left) / Math.max(1, right - left);
+      return Math.max(0, Math.min(labels.length - 1, Math.round(ratio * (labels.length - 1))));
+    }
+
+    function pointerXFromClientX(canvas, clientX) {
+      const rect = canvas.getBoundingClientRect();
+      return clientX - rect.left;
+    }
+
+    function attachDragZoom(chart) {
+      if (!chart || chart.$zoomBound) return;
+      chart.$zoomBound = true;
+      let dragStartX = null;
+      const canvas = chart.canvas;
+      const bandEl = chart.canvas.id === "fitness-zones-chart" ? fitnessSelectionBand : efficiencySelectionBand;
+      let activeMoveHandler = null;
+      let activeUpHandler = null;
+      canvas.style.cursor = "crosshair";
+      canvas.addEventListener("mousedown", (event) => {
+        dragStartX = event.offsetX;
+        updateSelectionBand(chart, bandEl, dragStartX, dragStartX);
+        activeMoveHandler = (moveEvent) => {
+          if (dragStartX == null) return;
+          const currentX = pointerXFromClientX(canvas, moveEvent.clientX);
+          updateSelectionBand(chart, bandEl, dragStartX, currentX);
+          updatePendingRange(chart, dragStartX, currentX);
+        };
+        activeUpHandler = (upEvent) => {
+          if (dragStartX == null) return;
+          const labels = chart.data.labels || [];
+          if (labels.length < 2) {
+            dragStartX = null;
+            clearSelectionBand(bandEl);
+            updateZoomMeta();
+          } else {
+            const endX = pointerXFromClientX(canvas, upEvent.clientX);
+            const startIdx = labelIndexForPointer(chart, dragStartX);
+            const endIdx = labelIndexForPointer(chart, endX);
+            dragStartX = null;
+            clearSelectionBand(bandEl);
+            if (startIdx < 0 || endIdx < 0 || startIdx === endIdx) {
+              updateZoomMeta();
+            } else {
+              const minIdx = Math.min(startIdx, endIdx);
+              const maxIdx = Math.max(startIdx, endIdx);
+              currentRange = {
+                start: labels[minIdx],
+                end: labels[maxIdx],
+              };
+              rerenderAnalysis();
+            }
+          }
+          window.removeEventListener("mousemove", activeMoveHandler);
+          window.removeEventListener("mouseup", activeUpHandler);
+          activeMoveHandler = null;
+          activeUpHandler = null;
+        };
+        window.addEventListener("mousemove", activeMoveHandler);
+        window.addEventListener("mouseup", activeUpHandler);
+      });
+      canvas.addEventListener("dblclick", () => {
+        currentRange = { start: "", end: "" };
+        rerenderAnalysis();
+      });
+    }
+
+    function renderFitnessZones(zoneSeriesMap) {
+      const zoneEntries = Object.entries(zoneSeriesMap || {}).filter(([zoneId]) => zoneId !== "lt_120");
+      if (!zoneEntries.length) {
+        fitnessZonesNote.textContent = "No fitness zone data available yet.";
+        return;
+      }
+      const colors = {
+        lt_120: "#55bde4",
+        hr_120_140: "#7ce7c8",
+        hr_141_150: "#ffe17a",
+        hr_151_160: "#ffb155",
+        gt_160: "#ff7c43",
+      };
+      const filteredEntries = zoneEntries.map(([zoneId, series]) => [zoneId, { ...series, points: filterPointsByDate(series.points || []) }]);
+      const allLabels = Array.from(new Set(filteredEntries.flatMap(([, series]) => (series.points || []).map((point) => point.window_end)))).sort();
+      const datasets = zoneEntries.map(([zoneId, series]) => {
+        const filteredPoints = filterPointsByDate(series.points || []);
+        const valuesByEnd = new Map(filteredPoints.map((point) => [point.window_end, displayValue(series, point.value)]));
+        return {
+          label: series.label,
+          data: allLabels.map((label) => valuesByEnd.get(label) ?? null),
+          borderColor: colors[zoneId] || "#ff7c43",
+          backgroundColor: `${colors[zoneId] || "#ff7c43"}22`,
+          tension: 0.25,
+          pointRadius: 1.5,
+          spanGaps: true,
+        };
+      });
+      const bounds = yScaleBounds(datasets.flatMap((dataset) => dataset.data));
+      const latestDescriptions = filteredEntries
+        .map(([, series]) => {
+          const lastPoint = (series.points || []).at(-1);
+          if (!lastPoint) return `${series.label}: no window yet`;
+          return `${series.label}: ${displayValue(series, lastPoint.value)} ${displayUnit(series)} (${describeSourceMix(lastPoint)})`;
+        })
+        .join(" | ");
+      fitnessZonesNote.textContent = latestDescriptions;
+      const config = {
+        type: "line",
+        data: { labels: allLabels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true },
+            tooltip: {
+              callbacks: {
+                label: (item) => `${item.dataset.label}: ${item.parsed.y} km/h`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 8 },
+              grid: { display: false },
+            },
+            y: {
+              min: bounds.min,
+              max: bounds.max,
+              ticks: { maxTicksLimit: 6 },
+              grid: { color: "#1a2233" },
+            },
+          },
+        },
+      };
+      if (!fitnessZonesChart) {
+        fitnessZonesChart = new Chart(fitnessZonesCtx, config);
+        attachDragZoom(fitnessZonesChart);
+      } else {
+        fitnessZonesChart.data = config.data;
+        fitnessZonesChart.options = config.options;
+        fitnessZonesChart.update();
+      }
+    }
+
+    function rerenderAnalysis() {
+      if (!currentAnalysis) return;
+      updateZoomMeta();
+      renderFitnessZones(currentAnalysis.series?.fitness_trend_zones || {});
+      renderSeriesChart(
+        efficiencyCtx,
+        efficiencyMeta,
+        efficiencyNote,
+        "Efficiency at HR",
+        "#7ce7c8",
+        currentAnalysis.series?.efficiency_at_hr_trend || { points: [], unit: "m_per_min_per_bpm" }
+      );
+    }
+
+    async function init() {
+      try {
+        const res = await fetch(bust("../data/fitness_analysis.json"));
+        if (!res.ok) {
+          throw new Error("fitness_analysis.json not found. Run fetch_strava.py or Refresh first.");
+        }
+        const analysis = await res.json();
+        currentAnalysis = analysis;
+        const coverage = analysis.coverage || {};
+        statTotal.textContent = (coverage.run_count_total || 0).toLocaleString();
+        statComparable.textContent = (coverage.run_count_comparable || 0).toLocaleString();
+        statStream.textContent = (coverage.stream_backed_runs || coverage.run_count_stream_source || 0).toLocaleString();
+        statSummary.textContent = (coverage.summary_fallback_runs || coverage.run_count_summary_source || 0).toLocaleString();
+
+        methodologyVersion.textContent = analysis.methodology_version || "—";
+        sourcePolicy.textContent = sourcePolicyText(analysis.source_policy);
+        const rule = analysis.comparability_rule || {};
+        comparabilityRule.textContent = comparabilityRuleText(rule);
+        caveatsList.innerHTML = "";
+        (analysis.caveats || []).forEach((entry) => {
+          const li = document.createElement("li");
+          li.textContent = entry;
+          caveatsList.appendChild(li);
+        });
+
+        rerenderAnalysis();
+      } catch (err) {
+        efficiencyMeta.textContent = "Unavailable";
+        fitnessZonesNote.textContent = err.message || String(err);
+        efficiencyNote.textContent = "Generate the analysis artifact first.";
+      }
+    }
+
+    zoomReset.addEventListener("click", () => {
+      currentRange = { start: "", end: "" };
+      rerenderAnalysis();
+    });
+
+    init();
+  </script>
+</body>
+</html>
