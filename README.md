@@ -76,6 +76,18 @@ The workflow is fetch -> render -> view.
   - translucent selection band while dragging
   - `Reset Zoom` or double-click to return to the full range
 
+### Browser interaction tests
+- Install the browser test dependency: `npm install`
+- Download Chromium for Playwright once on a machine: `npx playwright install chromium`
+- Run the browser interaction suite: `npm run test:e2e`
+- Run it headed for debugging: `npm run test:e2e:headed`
+
+The current Playwright setup covers:
+- dashboard navigation and run-history interaction
+- analysis-page explain hovers
+- drag zoom, clipping at date extremes, reset button, and double-click reset
+- protected `/api/*` boundary vs open dashboard-facing `/activity-stream`
+
 ### Refreshing Strava tokens / scopes
 - Build an auth URL: `python scripts/strava_auth_helper.py` (uses `STRAVA_CLIENT_ID/SECRET` from `.env`).
 - Open the URL, approve with scopes `read,activity:read_all`, then copy the `code` from the redirect.
