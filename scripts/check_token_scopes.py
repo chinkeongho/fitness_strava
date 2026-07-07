@@ -3,10 +3,18 @@
 Refresh the Strava token and print the scopes. Useful for confirming you have activity:read_all.
 """
 import os
+import re
 from dotenv import load_dotenv
 import requests
 
 TOKEN_URL = "https://www.strava.com/oauth/token"
+
+
+def has_activity_read_all(scope: str | None) -> bool:
+    if not scope:
+        return False
+    scopes = {part for part in re.split(r"[\s,]+", scope) if part}
+    return "activity:read_all" in scopes
 
 
 def main() -> None:
@@ -34,10 +42,10 @@ def main() -> None:
     payload = resp.json()
     scope = payload.get("scope") or scope_hint
     print("Scopes:", scope)
-    print("Access token (do not commit):", payload.get("access_token"))
-    print("Refresh token (do not commit):", payload.get("refresh_token"))
+    print("Access token refreshed:", bool(payload.get("access_token")))
+    print("Refresh token refreshed:", bool(payload.get("refresh_token")))
     print("Expires at:", payload.get("expires_at"))
-    if not scope or "activity:read_all" not in scope:
+    if not has_activity_read_all(scope):
         print("If scopes do not include activity:read_all, re-run the OAuth flow with scopes=read,activity:read_all.")
 
 

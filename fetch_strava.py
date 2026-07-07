@@ -12,6 +12,7 @@ Optional:
 import argparse
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -66,7 +67,7 @@ def refresh_access_token(client_id: str, client_secret: str, refresh_token: str)
 def _has_activity_scope(scope_value: Optional[str]) -> bool:
     if not scope_value:
         return False
-    scopes = {s.strip() for s in scope_value.split(",")}
+    scopes = {s.strip() for s in re.split(r"[\s,]+", scope_value) if s.strip()}
     return "activity:read" in scopes or "activity:read_all" in scopes
 
 
